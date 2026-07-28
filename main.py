@@ -2,7 +2,6 @@
 
 import requests
 import re
-import schedule
 import os
 from selenium import webdriver
 
@@ -11,13 +10,8 @@ import time
 import threading
 from pathlib import Path
 
-
 base_url = 'https://www.mixcloud.com/essentialmixcollection/'
-
 file_dir = '/media/dave/bigdisk/emixes'
-#file_dir = '/media/dave/bigdisk/emixes_tmp'
-
-#file_dir = '/tmp'
 
 def downloadPage(year, playlist_name,slimit):
     purl = setupPlaylistURL(year,playlist_name)
@@ -34,14 +28,15 @@ def setupPlaylistURL(year,playlist_name):
 
 def getHTMLSource(url,slimit):
     print("Browser setup : {}".format(url))
-    sys.path.append('/usr/lib/chromium-browser/')
+    sys.path.append('/usr/local/bin/')
     options = webdriver.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
     options.add_argument("--test-type")
     options.add_argument("--headless")
-    options.binary_location = "/usr/bin/chromium-browser"
+    options.binary_location = "/usr/local/bin/chromedriver"
 
-    driver = webdriver.Chrome('./chromedriver/chromedriver', chrome_options=options)
+    driver = webdriver.Chrome(options = options)
+    
     driver.get(url)
 
     for i in range(0, slimit, 1):
@@ -64,43 +59,54 @@ def createYearDir(year):
 
 
 def fileExist(file):
+    '''
+    Simple routine to check if a file exists or not to prevent stamping over an 
+    existing downloaded file
+    '''
     if (Path(file).exists()):
         return True
     return False
 
-def extractMixes(htmltext):
+def extractMixes(htmltext: str):
+    '''
+    Extract the mix name from the URLS found within the htmlpage
+    
+    Args:
+        htmltext: str, holding a Mixcloud htmltext page for analysis
+    
+    Returns:
+        filtered: Dict, representing all the mixes found in the html text
+    ''' 
     matches = re.findall('/(essentialmixcollection/([21][^\/]+))/"', htmltext)
-    # print("Matches")
     filtered = {match: '' for match in matches}
     print("\nFULL FILTERED : {}".format(filtered))
     print("Number of mixes to DL  {}".format(len(filtered.keys())))
-    #time.sleep(5)
-    #sys.exit()
     return filtered
 
-def downloadMixes(htmltext):
-
-    #eurl = "{}/{}-{}".format(base_url, 'playlists/essential-mix', year)
-    # print(eurl)
-    #response = requests.get(eurl)
+def downloadMixes(htmltext: str):
+    '''
+    Download all mixes found within the HTML text
+    '''
     filtered = extractMixes(htmltext)
     for match in filtered.keys():
+        
+        # Extract the year from the extracted filename
         year = re.match('^\d{4}', match[1])
         print(year)
         if(year):
             year = year.group(0)
         print(year)
-        #sys.exit()
+
+        # Create the year directory if required
         year_dir = createYearDir(year)
-        # href="/essentialmixcollection/20180203-essential-mix-lone/"
-        # https://www.mixcloud.com/essentialmixcollection/20180217-essential-mix-len-faki/
-
-
-        # print("EMIX MATCH : {}".format(match))
-        mix_url = "{}{}/".format(base_url, match[1])
-        # print(mix_url)
+        
+        # Example URL for downloading
         # http: // download.mixcloud - downloader.com / d / mixcloud / essentialmixcollection / 20180310 - essential - mix - peggy - gou
+        
+        # Format the download URL
         mcd_url = "{}/{}/".format('http://download.mixcloud-downloader.com/d/mixcloud', match[0])
+        
+        # Essential mix filename
         emix_file = "{}/{}.mp4".format(year_dir, match[1])
         print("Downloading from : {}".format(mcd_url))
         print("Destination file : {}".format(emix_file))
@@ -108,25 +114,41 @@ def downloadMixes(htmltext):
             print("Skipping {} - reason - already exists".format(emix_file))
             continue
 
+        # Use a temp file to download the mp4 file into before moving 
+        # it to the real file after download is complete
         temp_file = "{}.tmp".format(emix_file)
 
+        # Open an http request to Mixcloud
         r = requests.get(mcd_url, stream=True, verify=False)
 
-
+        # Open the destination .mp4 file
         with open(temp_file, 'wb') as MP4:
+            # Download the mp4 file and stream by chunks to file
             for chunk in r.iter_content(chunk_size=1024):
                 # writing one chunk at a time to pdf file
                 if chunk:
                     MP4.write(chunk)
         
+        # Rename the temp file to the real filename 
         os.rename(temp_file, emix_file)
 
 
-def main():
-    print("hello")
+def main( argv ):
+    '''
+    
+    Main Mixcloud downloader routine
+    Args:
+        argv: system arguments
+    Returns: False
+    
+    '''
+    print("Mixcloud mix downloader")
+
+    # Set all years for the essentialmix
     years = [ y for y in range(1993,2020,1) ]
     years_hash = { y:'essential-mix-'+str(y) for y in years}
-    years_hash[1993] = ''
+    # Test a single year
+    #years_hash[1993] = ''
     print(years_hash)
     base_url = ''
 
@@ -145,5 +167,4 @@ def main():
 
 
 if __name__ == '__main__':
-
-    main()
+    main( sys.argv )
